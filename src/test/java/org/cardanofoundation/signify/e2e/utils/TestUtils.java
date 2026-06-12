@@ -1,6 +1,5 @@
 package org.cardanofoundation.signify.e2e.utils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
@@ -8,13 +7,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.cardanofoundation.signify.generated.keria.model.Contact;
+
 import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.aiding.EventResult;
 import org.cardanofoundation.signify.app.aiding.IdentifierListResponse;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Operation;
+import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.credentials.CredentialData;
 import org.cardanofoundation.signify.app.credentialing.credentials.CredentialFilter;
 import org.cardanofoundation.signify.app.credentialing.credentials.IssueCredentialResult;
@@ -31,17 +29,12 @@ import java.util.concurrent.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
-import org.cardanofoundation.signify.generated.keria.model.OOBI;
-import org.cardanofoundation.signify.generated.keria.model.Tier;
-
 import static org.cardanofoundation.signify.app.coring.Coring.randomPasscode;
 import static org.cardanofoundation.signify.e2e.utils.Retry.retry;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Slf4j
 public class TestUtils {
-    private static final ObjectMapper objectMapper = new ObjectMapper();
     private static List<Notification> filteredNotes;
 
     public static class Aid {
@@ -91,7 +84,7 @@ public class TestUtils {
 
     public static void assertOperations(List<SignifyClient> clients) throws IOException, InterruptedException, LibsodiumException {
         for (SignifyClient client : clients) {
-            List<Operation<?>> operations = client.operations().list(null);
+            List<Operation> operations = client.operations().list();
             assertEquals(0, operations.size());
         }
     }
@@ -162,19 +155,19 @@ public class TestUtils {
         if (existingAID.isPresent()) {
             return existingAID.get();
         } else {
-            EventResult result = client.identifiers().create(name, kargs);
-            waitOperation(client, result.op());
+            var result = client.identifiers().create(name, kargs);
+            waitForCompleted(client, result.op());
 
             HabState aid = client.identifiers().get(name)
                     .orElseThrow(() -> new IllegalArgumentException("Failed to create identifier: " + name));
-            
+
             if (client.getAgent() == null || client.getAgent().getPre() == null) {
                 throw new IllegalArgumentException("Client, agent, or pre cannot be null");
             }
 
             String pre = client.getAgent().getPre();
-            EventResult op = client.identifiers().addEndRole(name, "agent", pre, null);
-            waitOperation(client, op.op());
+            var op = client.identifiers().addEndRole(name, "agent", pre, null);
+            waitForCompleted(client, op.op());
 
             System.out.println(name + "AID:" + aid.getPrefix());
             return aid;
@@ -239,14 +232,11 @@ public class TestUtils {
     }
 
     public static String[] getOrCreateIdentifier(SignifyClient client, String name, CreateIdentifierArgs kargs) throws Exception {
-        Object id = null;
-        String eid;
-        Object op, ops;
+        String id;
 
         Optional<HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
             id = optionalIdentifier.get().getPrefix();
-            
         } else {
             ResolveEnv.EnvironmentConfig env = ResolveEnv.resolveEnvironment(null);
             if (kargs == null) {
@@ -254,39 +244,25 @@ public class TestUtils {
                 kargs.setToad(env.witnessIds().size());
                 kargs.setWits(env.witnessIds());
             }
-            EventResult result = client.identifiers().create(name, kargs);
-            op = result.op();
-            op = operationToObject(waitOperation(client, op));
-            if (op instanceof String) {
-                try {
-                    HashMap<String, Object> map = objectMapper.readValue(
-                            (String) op,
-                            new TypeReference<HashMap<String, Object>>() {}
-                    );
-                    Map<String, Object> idMap = castObjectToLinkedHashMap(map.get("response"));
-                    id = idMap.get("i");
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
+            var result = client.identifiers().create(name, kargs);
+            waitForCompleted(client, result.op());
+            id = result.serder().getPre();
+
+            String eid;
             if (client.getAgent() != null && client.getAgent().getPre() != null) {
                 eid = client.getAgent().getPre();
             } else {
                 throw new IllegalStateException("Agent or pre is null");
             }
             if (!hasEndRole(client, name, "agent", eid)) {
-                EventResult results = client.identifiers().addEndRole(name, "agent", eid, null);
-                ops = results.op();
-                ops = operationToObject(waitOperation(client, ops));
+                var results = client.identifiers().addEndRole(name, "agent", eid, null);
+                waitForCompleted(client, results.op());
             }
         }
 
         OOBI oobi = client.oobis().get(name, "agent").get();
         String getOobi = oobi.getOobis().toString().replaceAll("[\\[\\]]", "");
-        String[] result = new String[]{
-                id != null ? id.toString() : null, getOobi
-        };
-        return result;
+        return new String[]{id, getOobi};
     }
 
     public static String getOrCreateContact(SignifyClient client, String name, String oobi) throws IOException, InterruptedException, LibsodiumException {
@@ -297,17 +273,14 @@ public class TestUtils {
                 return contact.getId();
             }
         }
-        Object op = client.oobis().resolve(oobi, name);
+        OOBIOperation op = client.oobis().resolve(oobi, name);
 
-        Operation<?> opBody = waitOperation(client, op);
-        LinkedHashMap<String, Object> response = castObjectToLinkedHashMap(opBody.getResponse());
-
-        if (response.get("i") != null) {
-            return response.get("i").toString();
-        } else if (response.get("i") == null) {
-            return getOrCreateContact(client, name, oobi);
+        CompletedOOBIOperation opBody = waitForCompleted(client, op, CompletedOOBIOperation.class);
+        String i = opBody.getResponse().getI();
+        if (i != null) {
+            return i;
         }
-        return null;
+        return getOrCreateContact(client, name, oobi);
     }
 
     public static Credential getOrIssueCredential(
@@ -365,7 +338,7 @@ public class TestUtils {
         cData.setE(source);
 
         IssueCredentialResult issResult = issuerClient.credentials().issue(issuerAid.name, cData);
-        waitOperation(issuerClient, issResult.getOp());
+        waitForCompleted(issuerClient, issResult.getOp());
 
         return issuerClient.credentials().get(issResult.getAcdc().getKed().get("d").toString()).get();
     }
@@ -405,14 +378,13 @@ public class TestUtils {
     }
 
     public static void deleteOperations(SignifyClient client, Operation op) throws IOException, InterruptedException, LibsodiumException {
-        if (op.getMetadata() != null && op.getMetadata().getDepends() != null) {
-            deleteOperations(client, op.getMetadata().getDepends());
-        }
-        client.operations().delete(op.getName());
-    }
+        KelOperation dep = Operations.dependsOf(op);
 
-    public static void deleteOperation(SignifyClient client, String name) throws IOException, InterruptedException, LibsodiumException {
-        client.operations().delete(name);
+        if (dep != null) {
+            client.operations().delete(dep.getName());
+        }
+
+        client.operations().delete(op.getName());
     }
 
     public static Credential getReceivedCredential(SignifyClient client, String credID) throws Exception {
@@ -439,8 +411,8 @@ public class TestUtils {
     }
 
     public static void resolveOobi(SignifyClient client, String oobi, String alias) throws IOException, InterruptedException, LibsodiumException {
-        Object op = client.oobis().resolve(oobi, alias);
-        waitOperation(client, op);
+        OOBIOperation op = client.oobis().resolve(oobi, alias);
+        waitForCompleted(client, op);
     }
 
     public static Credential waitForCredential(SignifyClient client, String credSAID) throws Exception {
@@ -477,7 +449,7 @@ public class TestUtils {
                 }
             }));
         }
-        CompletableFuture.allOf(markOperationFutures.toArray(new CompletableFuture[0]));
+        CompletableFuture.allOf(markOperationFutures.toArray(new CompletableFuture[0])).join();
 
         return notes.isEmpty() ? "" :
                 Optional.ofNullable(notes.getLast())
@@ -511,25 +483,37 @@ public class TestUtils {
         }, retryOptions);
     }
 
-    public static <T> Operation<T> waitOperation(
+    /** Default per-operation timeout so an unreachable dependency fails the test instead of hanging it. */
+    private static final long OPERATION_TIMEOUT_MS = 30_000;
+
+    public static Operation waitOperation(
             SignifyClient client,
-            Object op
+            Operation op
     ) throws IOException, InterruptedException, LibsodiumException {
-        Operation operation = Operation.fromObject(op);
-        operation = client.operations().wait(operation);
-        deleteOperations(client, operation);
-        return operation;
+        Operations.WaitOptions options = Operations.WaitOptions.builder()
+                .abortSignal(Operations.AbortSignal.builder().timeout(OPERATION_TIMEOUT_MS).build())
+                .build();
+        Operation result = client.operations().wait(op, Operation.class, options);
+        deleteOperations(client, op);
+        return result;
     }
 
-    public static Object operationToObject(Operation<?> operation) throws JsonProcessingException {
-        Map<String, Object> opMap = new LinkedHashMap<>();
-        opMap.put("name", operation.getName());
-        opMap.put("metadata", operation.getMetadata() != null ? operation.getMetadata().getProperties() : null);
-        opMap.put("done", operation.isDone());
-        opMap.put("error", operation.getError());
-        opMap.put("response", operation.getResponse());
+    public static Operation waitForCompleted(SignifyClient client, Operation op)
+            throws IOException, InterruptedException, LibsodiumException {
+        Operation result = waitOperation(client, op);
+        if (result instanceof FailedOperation failed) {
+            throw new AssertionError("Operation failed: " + failed.getError().getMessage());
+        }
+        return result;
+    }
 
-        return objectMapper.writeValueAsString(opMap);
+    public static <T extends Operation> T waitForCompleted(SignifyClient client, Operation op, Class<T> expectedType)
+            throws IOException, InterruptedException, LibsodiumException {
+        Operation result = waitForCompleted(client, op);
+        if (!expectedType.isInstance(result)) {
+            throw new AssertionError("Expected " + expectedType.getSimpleName() + " but got " + result.getClass().getSimpleName());
+        }
+        return expectedType.cast(result);
     }
 
     public static Integer parseInteger(String s) {

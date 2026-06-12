@@ -19,6 +19,7 @@ import java.security.DigestException;
 import java.util.*;
 import org.cardanofoundation.signify.generated.keria.model.HabState;
 import org.cardanofoundation.signify.generated.keria.model.Registry;
+import org.cardanofoundation.signify.generated.keria.model.RegistryOperation;
 import com.fasterxml.jackson.core.type.TypeReference;
 import static org.cardanofoundation.signify.cesr.util.CoreUtil.Versionage;
 
@@ -104,7 +105,8 @@ public class Registries {
             List<String> sigs = keeper.sign(serder.getRaw().getBytes()).signatures();
 
             HttpResponse<String> res = this.createFromEvents(hab, args.getName(), args.getRegistryName(), regser.getKed(), serder.getKed(), sigs);
-            return new RegistryResult(regser, serder, sigs, res);
+            RegistryOperation op = Utils.fromJson(res.body(), RegistryOperation.class);
+            return new RegistryResult(regser, serder, sigs, op);
         }
     }
 
@@ -117,7 +119,7 @@ public class Registries {
      * @param vcp          the VCP data
      * @param ixn          the IXN data
      * @param sigs         the signatures
-     * @return an Object representing the result of the operation
+     * @return the raw HTTP response from the registry creation endpoint
      * @throws IOException          if an I/O error occurs
      * @throws InterruptedException if the operation is interrupted
      * @throws LibsodiumException   if a sodium exception occurs
