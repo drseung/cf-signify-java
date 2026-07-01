@@ -1,6 +1,11 @@
 package org.cardanofoundation.signify.app.credentialing.ipex;
 
 import org.cardanofoundation.signify.app.Exchanging;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_ADMIT_ROUTE;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_AGREE_ROUTE;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_APPLY_ROUTE;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_GRANT_ROUTE;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_OFFER_ROUTE;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.cesr.Serder;
 import org.cardanofoundation.signify.cesr.Keeping.Keeper;
@@ -37,7 +42,7 @@ public class Ipex {
             .exchanges()
             .createExchangeMessage(
                 hab,
-                "/ipex/apply",
+                IPEX_APPLY_ROUTE,
                 data,
                 new LinkedHashMap<>(),
                 args.getRecipient(),
@@ -53,7 +58,7 @@ public class Ipex {
         body.put("rec", recp);
 
         HttpResponse<String> response = this.client.fetch(
-            "/identifiers/" + name + "/ipex/apply",
+            "/identifiers/" + name + IPEX_APPLY_ROUTE,
             "POST",
             body
         );
@@ -76,7 +81,7 @@ public class Ipex {
             .exchanges()
             .createExchangeMessage(
                 hab,
-                "/ipex/offer",
+                IPEX_OFFER_ROUTE,
                 data,
                 embeds,
                 args.getRecipient(),
@@ -93,7 +98,7 @@ public class Ipex {
         body.put("rec", recp);
 
         HttpResponse<String> response = this.client.fetch(
-            "/identifiers/" + name + "/ipex/offer",
+            "/identifiers/" + name + IPEX_OFFER_ROUTE,
             "POST",
             body
         );
@@ -113,7 +118,7 @@ public class Ipex {
             .exchanges()
             .createExchangeMessage(
                 hab,
-                "/ipex/agree",
+                IPEX_AGREE_ROUTE,
                 data,
                 Map.of(),
                 args.getRecipient(),
@@ -129,7 +134,7 @@ public class Ipex {
         body.put("rec", recp);
 
         HttpResponse<String> response = this.client.fetch(
-            "/identifiers/" + name + "/ipex/agree",
+            "/identifiers/" + name + IPEX_AGREE_ROUTE,
             "POST",
             body
         );
@@ -167,7 +172,7 @@ public class Ipex {
             .exchanges()
             .createExchangeMessage(
                 hab,
-                "/ipex/grant",
+                IPEX_GRANT_ROUTE,
                 data,
                 embeds,
                 args.getRecipient(),
@@ -185,7 +190,7 @@ public class Ipex {
         );
 
         HttpResponse<String> response = this.client.fetch(
-            "/identifiers/" + name + "/ipex/grant",
+            "/identifiers/" + name + IPEX_GRANT_ROUTE,
             "POST",
             body
         );
@@ -205,7 +210,7 @@ public class Ipex {
             .exchanges()
             .createExchangeMessage(
                 hab,
-                "/ipex/admit",
+                IPEX_ADMIT_ROUTE,
                 data,
                 Map.of(),
                 args.getRecipient(),
@@ -222,10 +227,11 @@ public class Ipex {
         body.put("rec", recp);
 
         HttpResponse<String> response = this.client.fetch(
-            "/identifiers/" + name + "/ipex/admit",
+            "/identifiers/" + name + IPEX_ADMIT_ROUTE,
             "POST",
             body
         );
         return Utils.fromJson(response.body(), ExchangeOperation.class);
     }
+
 }

@@ -171,6 +171,24 @@ public class Exchanging {
             
             return Optional.of(Utils.fromJson(res.body(), ExchangeResource.class));
         }
+
+        /**
+         * Fetches an exchange message and types it by its own route; empty when not
+         * found or the route is unknown. Use the route-specific getters when the
+         * expected type is already known.
+         */
+        public Optional<ExnMessages.TypedExchange> getTyped(String said) throws Exception {
+            return get(said).flatMap(ExnMessages::asTyped);
+        }
+
+        /**
+         * Fetches an exchange message as the given typed form; empty when not found
+         * or when its route does not produce that type.
+         */
+        public <T extends ExnMessages.TypedExchange> Optional<T> get(String said, Class<T> type) throws Exception {
+            return get(said).flatMap(msg -> ExnMessages.as(msg, type));
+        }
+
     }
 
     public static ExchangeResult exchange(

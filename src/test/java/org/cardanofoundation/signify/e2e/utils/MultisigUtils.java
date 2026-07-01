@@ -5,6 +5,10 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import org.cardanofoundation.signify.app.Exchanging;
+import org.cardanofoundation.signify.app.ExnMessages.MultisigIcpExchange;
+import org.cardanofoundation.signify.app.ExnMessages.MultisigIxnExchange;
+import static org.cardanofoundation.signify.app.ExnMessages.*;
+import static org.cardanofoundation.signify.app.ExnMessages.as;
 import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
 import org.cardanofoundation.signify.app.aiding.RotateIdentifierArgs;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
@@ -33,7 +37,6 @@ import org.cardanofoundation.signify.generated.keria.model.Credential;
 import org.cardanofoundation.signify.generated.keria.model.CredentialOperation;
 import org.cardanofoundation.signify.generated.keria.model.DelegatorOperation;
 import org.cardanofoundation.signify.generated.keria.model.EndRoleOperation;
-import org.cardanofoundation.signify.generated.keria.model.Exn;
 import org.cardanofoundation.signify.generated.keria.model.ExnMultisig;
 import org.cardanofoundation.signify.generated.keria.model.GroupMember;
 import org.cardanofoundation.signify.generated.keria.model.GroupOperation;
@@ -50,10 +53,10 @@ public class MultisigUtils {
                 .orElseThrow(() -> new IllegalArgumentException("Identifier not found: " + args.getLocalMemberName()));
 
         List<ExnMultisig> res = client2.groups().getRequest(args.getMsgSaid()).get();
-        Exn exn = res.getFirst().getExn();
-        Map<String, Object> icp = Utils.toMap(exn.getE().get("icp"));
-        List<String> smids = (List<String>) Utils.toMap(exn.getA()).get("smids");
-        List<String> rmids = (List<String>) Utils.toMap(exn.getA()).get("rmids");
+        MultisigIcpExchange group = as(res.getFirst(), MultisigIcpExchange.class).orElseThrow();
+        Map<String, Object> icp = group.e().icp();
+        List<String> smids = group.a().smids();
+        List<String> rmids = group.a().rmids();
 
         List<KeyStateRecord> states = TestUtils.getStates(client2, smids)
             .stream()
@@ -71,7 +74,7 @@ public class MultisigUtils {
         createIdentifierArgs.setIsith(icp.get("kt"));
         createIdentifierArgs.setNsith(icp.get("nt"));
         createIdentifierArgs.setToad(Integer.valueOf(icp.get("bt").toString()));
-        createIdentifierArgs.setWits((List<String>) icp.get("b"));
+        createIdentifierArgs.setWits(Utils.toList(icp.get("b")));
         createIdentifierArgs.setStates(states);
         createIdentifierArgs.setRstates(rstates);
         createIdentifierArgs.setDelpre(icp.get("di") != null ? icp.get("di").toString() : null);
@@ -96,7 +99,7 @@ public class MultisigUtils {
         payload.put("rmids", rmids);
 
         client2.exchanges()
-                .send(args.localMemberName, args.groupName, memberHab, "/multisig/icp", payload, embeds, recipients);
+                .send(args.localMemberName, args.groupName, memberHab, MULTISIG_ICP_ROUTE, payload, embeds, recipients);
 
         return op2;
     }
@@ -107,7 +110,7 @@ public class MultisigUtils {
                                           List<KeyStateRecord> states,
                                           boolean isInitiator) throws Exception {
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/ixn");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_IXN_ROUTE);
         }
 
         var interactResult = client
@@ -137,7 +140,7 @@ public class MultisigUtils {
                 aid.getName(),
                 groupName,
                 aid,
-                "/multisig/ixn",
+                MULTISIG_IXN_ROUTE,
                 payload,
                 xembeds,
                 recp
@@ -152,7 +155,7 @@ public class MultisigUtils {
                                           String route,
                                           boolean isInitiator) throws Exception {
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/rot");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_ROT_ROUTE);
         }
 
         var interactResult = client
@@ -203,7 +206,7 @@ public class MultisigUtils {
                                             String timestamp,
                                             boolean isInitiator) throws Exception {
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/rpy");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_RPY_ROUTE);
         }
 
         List<EndRoleOperation> opList = new ArrayList<>();
@@ -242,7 +245,7 @@ public class MultisigUtils {
                     aid.getName(),
                     groupName,
                     aid,
-                    "/multisig/rpy",
+                    MULTISIG_RPY_ROUTE,
                     payload,
                     roleEmbeds,
                     recp
@@ -257,7 +260,7 @@ public class MultisigUtils {
                                                   String timestamp,
                                                   boolean isInitiator) throws Exception {
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/rpy");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_RPY_ROUTE);
         }
 
         List<EndRoleOperation> opList = new ArrayList<>();
@@ -295,7 +298,7 @@ public class MultisigUtils {
                 aid.getName(),
                 groupName,
                 aid,
-                "/multisig/rpy",
+                MULTISIG_RPY_ROUTE,
                 payload,
                 roleEmbeds,
                 recp
@@ -311,7 +314,7 @@ public class MultisigUtils {
             HabState recipientAID,
             String timestamp
     ) throws Exception {
-        String grantMsgSaid = TestUtils.waitAndMarkNotification(client, "/exn/ipex/grant");
+        String grantMsgSaid = TestUtils.waitAndMarkNotification(client, "/exn" + IPEX_GRANT_ROUTE);
 
         IpexAdmitArgs ipexAdmitArgs = IpexAdmitArgs
                 .builder()
@@ -358,7 +361,7 @@ public class MultisigUtils {
                 .send(aid.getName(),
                         "multisig",
                         aid,
-                        "/multisig/exn",
+                        MULTISIG_EXN_ROUTE,
                         payload,
                         gembeds,
                         recp
@@ -374,7 +377,7 @@ public class MultisigUtils {
             boolean isInitiator) throws Exception {
 
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/icp");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_ICP_ROUTE);
         }
 
         var icpResult = client.identifiers().create(groupName, kargs);
@@ -404,7 +407,7 @@ public class MultisigUtils {
                 aid.getName(),
                 "multisig",
                 aid,
-                "/multisig/icp",
+                MULTISIG_ICP_ROUTE,
                 payload,
                 embeds,
                 recp
@@ -430,7 +433,7 @@ public class MultisigUtils {
             boolean isInitiator) throws Exception {
 
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/vcp");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_VCP_ROUTE);
         }
 
         CreateRegistryArgs createRegistryArgs = CreateRegistryArgs
@@ -463,7 +466,7 @@ public class MultisigUtils {
                 aid.getName(),
                 topic,
                 aid,
-                "/multisig/vcp",
+                MULTISIG_VCP_ROUTE,
                 Map.of("gid", multisigAID.getPrefix()),
                 regbeds,
                 recp
@@ -493,11 +496,11 @@ public class MultisigUtils {
             boolean isInitiator) throws Exception {
 
         if (!isInitiator) {
-            String msgSaid = TestUtils.waitAndMarkNotification(client, "/multisig/ixn");
+            String msgSaid = TestUtils.waitAndMarkNotification(client, MULTISIG_IXN_ROUTE);
             System.out.println(aid.getName() + "(" + aid.getPrefix() + ") received exchange message to join the interaction event");
             List<ExnMultisig> res = client.groups().getRequest(msgSaid).get();
-            Exn exn = res.getFirst().getExn();
-            Map<String, Object> ixn = Utils.toMap(exn.getE().get("ixn"));
+            MultisigIxnExchange group = as(res.getFirst(), MultisigIxnExchange.class).orElseThrow();
+            Map<String, Object> ixn = group.e().ixn();
             anchor = (Map<String, String>) ((List<Object>) ixn.get("a")).get(0);
         }
 
@@ -529,7 +532,7 @@ public class MultisigUtils {
                 aid.getName(),
                 multisigAID.getName(),
                 aid,
-                "/multisig/ixn",
+                MULTISIG_IXN_ROUTE,
                 payload,
                 xembeds,
                 recp
@@ -555,7 +558,7 @@ public class MultisigUtils {
             boolean isInitiator) throws Exception {
 
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/exn");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_EXN_ROUTE);
         }
 
         IpexGrantArgs ipexGrantArgs = IpexGrantArgs
@@ -602,7 +605,7 @@ public class MultisigUtils {
                 aid.getName(),
                 "multisig",
                 aid,
-                "/multisig/exn",
+                MULTISIG_EXN_ROUTE,
                 Map.of("gid", multisigAID.getPrefix()),
                 gembeds,
                 recp
@@ -618,7 +621,7 @@ public class MultisigUtils {
             boolean isInitiator) throws Exception {
 
         if (!isInitiator) {
-            TestUtils.waitAndMarkNotification(client, "/multisig/iss");
+            TestUtils.waitAndMarkNotification(client, MULTISIG_ISS_ROUTE);
         }
 
         IssueCredentialResult credResult = client.credentials().issue(multisigAIDName, kargsIss);
@@ -647,7 +650,7 @@ public class MultisigUtils {
                 aid.getName(),
                 "multisig",
                 aid,
-                "/multisig/iss",
+                MULTISIG_ISS_ROUTE,
                 Map.of("gid", multisigAID.getPrefix()),
                 embeds,
                 recp

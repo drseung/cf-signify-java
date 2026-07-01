@@ -2,13 +2,9 @@ package org.cardanofoundation.signify.e2e.utils;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.signify.app.Notifying;
+import org.cardanofoundation.signify.app.Notifying.Notifications.NotificationListResponse;
 import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
 import org.cardanofoundation.signify.app.aiding.IdentifierListResponse;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
@@ -49,27 +45,6 @@ public class TestUtils {
         }
     }
 
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Notification {
-        public String i;
-        public String dt;
-        public boolean r;
-        public NotificationAction a;
-
-        @Getter
-        @Setter
-        @NoArgsConstructor
-        @AllArgsConstructor
-        public static class NotificationAction {
-            public String r;
-            public String d;
-            public String m;
-        }
-    }
-
     public static void sleep(long ms) {
         try {
             TimeUnit.MILLISECONDS.sleep(ms);
@@ -91,11 +66,10 @@ public class TestUtils {
 
     public static void assertNotifications(List<SignifyClient> clients) throws LibsodiumException, IOException, InterruptedException {
         for (SignifyClient client : clients) {
-            Notifying.Notifications.NotificationListResponse res = client.notifications().list();
-            String notesResponse = res.notes();
-            List<Notification> notes = Utils.fromJson(notesResponse, new TypeReference<>() {
-            });
-            filteredNotes = notes.stream().filter(note -> !note.isR()).collect(Collectors.toList());
+            NotificationListResponse res = client.notifications().list();
+            filteredNotes = res.notes().stream()
+                    .filter(note -> !Boolean.TRUE.equals(note.getR()))
+                    .collect(Collectors.toList());
             assertEquals(0, filteredNotes.size());
         }
     }
@@ -364,11 +338,8 @@ public class TestUtils {
     public static void warnNotifications(List<SignifyClient> clients) throws Exception {
         int count = 0;
         for (SignifyClient client : clients) {
-            Notifying.Notifications.NotificationListResponse res = client.notifications().list();
-            String notesResponse = res.notes();
-            List<Notification> notes = Utils.fromJson(notesResponse, new TypeReference<>() {
-            });
-            filteredNotes = notes.stream().filter(note -> !note.isR()).collect(Collectors.toList());
+            NotificationListResponse res = client.notifications().list();
+            List<Notification> notes = res.notes();
             if (!notes.isEmpty()) {
                 count += notes.size();
                 log.warn("notifications", notes);
@@ -394,12 +365,12 @@ public class TestUtils {
 
     public static void markAndRemoveNotification(SignifyClient client, Notification note) {
         try {
-            client.notifications().mark(note.i);
+            client.notifications().mark(note.getI());
         } catch (Exception e) {
-            throw new RuntimeException("Error marking notification: " + note.i, e);
+            throw new RuntimeException("Error marking notification: " + note.getI(), e);
         } finally {
             try {
-                client.notifications().delete(note.i);
+                client.notifications().delete(note.getI());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -452,9 +423,8 @@ public class TestUtils {
         CompletableFuture.allOf(markOperationFutures.toArray(new CompletableFuture[0])).join();
 
         return notes.isEmpty() ? "" :
-                Optional.ofNullable(notes.getLast())
-                        .map(note -> note.a)
-                        .map(a -> a.d)
+                Optional.ofNullable(notes.getLast().getA())
+                        .map(NotificationData::getD)
                         .orElse("");
     }
 
@@ -465,12 +435,11 @@ public class TestUtils {
     public static List<Notification> waitForNotifications(SignifyClient client, String route, Retry.RetryOptions retryOptions) throws Exception {
         return retry(() -> {
             try {
-                Notifying.Notifications.NotificationListResponse response = client.notifications().list();
-                String notesResponse = response.notes();
-                List<Notification> notes = Utils.fromJson(notesResponse, new TypeReference<>() {});
+                NotificationListResponse response = client.notifications().list();
 
-                filteredNotes = notes.stream()
-                        .filter(note -> Objects.equals(route, note.a.r) && !Boolean.TRUE.equals(note.r))
+                filteredNotes = response.notes().stream()
+                        .filter(note -> note.getA() != null && Objects.equals(route, note.getA().getR())
+                                && !Boolean.TRUE.equals(note.getR()))
                         .toList();
 
                 if (filteredNotes.isEmpty()) {

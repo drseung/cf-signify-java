@@ -4,7 +4,6 @@ import okhttp3.mockwebserver.RecordedRequest;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.credentialing.ipex.*;
 import org.cardanofoundation.signify.cesr.Saider;
-import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.Serder;
 import org.cardanofoundation.signify.cesr.args.InteractArgs;
 import org.cardanofoundation.signify.cesr.util.CoreUtil;
@@ -24,6 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class IpexTest extends BaseMockServerTest {
+
+    @Override
+    protected String exchangeResourceBody() {
+        return MOCK_EXCHANGE_RESOURCE_NEUTRAL;
+    }
 
     @Test
     @DisplayName("IPEX - grant-admit flow initiated by discloser")
@@ -353,4 +357,5 @@ public class IpexTest extends BaseMockServerTest {
         RecordedRequest lastCall = getRecordedRequests().getLast();
         assertEquals("/identifiers/multisig/ipex/offer", lastCall.getPath());
     }
+
 }

@@ -12,6 +12,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.cardanofoundation.signify.app.Exchanging.exchange;
+import org.cardanofoundation.signify.app.ExnMessages.IpexApplyExchange;
+import org.cardanofoundation.signify.app.ExnMessages.IpexGrantExchange;
+import org.cardanofoundation.signify.app.ExnMessages.MultisigIcpExchange;
+import static org.cardanofoundation.signify.app.ExnMessages.IPEX_APPLY_ROUTE;
+import static org.cardanofoundation.signify.app.ExnMessages.routeOf;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.security.DigestException;
@@ -259,10 +264,38 @@ public class ExchangingTest extends BaseMockServerTest {
         Exchanging.Exchanges exchanges = client.exchanges();
         String exchangeId = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
 
-        exchanges.get(exchangeId);
+        assertTrue(exchanges.get(exchangeId).isPresent());
 
         RecordedRequest request = mockWebServer.takeRequest();
         assertEquals("GET", request.getMethod());
         assertEquals("/exchanges/" + exchangeId, request.getPath());
+
+        // Mock returns /ipex/apply route — getIpexApply should resolve to typed model
+        var apply = exchanges.get(exchangeId, IpexApplyExchange.class);
+        request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertEquals("/exchanges/" + exchangeId, request.getPath());
+        assertTrue(apply.isPresent());
+        assertEquals(IPEX_APPLY_ROUTE, routeOf(apply.orElseThrow().exn()));
+
+        // Route mismatch — getIpexGrant should return empty
+        assertTrue(exchanges.get(exchangeId, IpexGrantExchange.class).isEmpty());
+        request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertEquals("/exchanges/" + exchangeId, request.getPath());
+
+        // Route mismatch — getMultisigIcp should return empty
+        assertTrue(exchanges.get(exchangeId, MultisigIcpExchange.class).isEmpty());
+        request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertEquals("/exchanges/" + exchangeId, request.getPath());
+
+        // getTyped dispatches on the exn's own route
+        var typed = exchanges.getTyped(exchangeId);
+        request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertEquals("/exchanges/" + exchangeId, request.getPath());
+        assertTrue(typed.isPresent());
+        assertTrue(typed.orElseThrow() instanceof ExnMessages.IpexApplyExchange);
     }
 }

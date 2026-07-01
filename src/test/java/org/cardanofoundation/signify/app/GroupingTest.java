@@ -10,7 +10,7 @@ import org.cardanofoundation.signify.generated.keria.model.Exn;
 import java.util.HashMap;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class GroupingTest extends BaseMockServerTest {
 
@@ -36,6 +36,26 @@ public class GroupingTest extends BaseMockServerTest {
             url + "/multisig/request/ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose00",
             request.getRequestUrl().toString()
         );
+
+        // Mock returns a /multisig/iss request — type it with the route parsers
+        var requests = groups.getRequest("ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose00").orElseThrow();
+        request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertEquals(
+            url + "/multisig/request/ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose00",
+            request.getRequestUrl().toString()
+        );
+        assertEquals(1, requests.size());
+
+        // route mismatch — typing as icp is empty
+        assertTrue(ExnMessages.as(requests.getFirst(), ExnMessages.MultisigIcpExchange.class).isEmpty());
+
+        // route match — parses to the typed iss exchange
+        var iss = ExnMessages.as(requests.getFirst(), ExnMessages.MultisigIssExchange.class).orElseThrow();
+        assertEquals("ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose", iss.a().gid());
+        // the envelope fields are typed on the generated ExnMultisig itself
+        assertEquals("multisig", requests.getFirst().getGroupName());
+        assertEquals("member1", requests.getFirst().getMemberName());
 
         groups.join(
             "aid1",
